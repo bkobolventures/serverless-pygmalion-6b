@@ -1,4 +1,4 @@
-from transformers import GPTJForCausalLM, GPT2Tokenizer
+from transformers import GPTJForCausalLM, AutoTokenizer, pipeline
 import torch
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -8,6 +8,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 def init():
     global model
     global tokenizer
+    global generator
 
     print("loading to CPU...")
     model = GPTJForCausalLM.from_pretrained("PygmalionAI/pygmalion-6b", torch_dtype=torch.float16, low_cpu_mem_usage=True)
@@ -19,8 +20,9 @@ def init():
         model.cuda()
         print("done")
 
-    tokenizer = GPT2Tokenizer.from_pretrained("PygmalionAI/pygmalion-6b")
-
+    # tokenizer = GPT2Tokenizer.from_pretrained("PygmalionAI/pygmalion-6b")
+    tokenizer = AutoTokenizer.from_pretrained("PygmalionAI/pygmalion-6b")
+    generator = pipeline("text-generation", model=model, tokenizer=tokenizer, device=0)
 
 # Inference is ran for every server call
 # Reference your preloaded global model variable here.
@@ -33,14 +35,17 @@ def inference(model_inputs:dict) -> dict:
     if prompt == None:
         return {'message': "No prompt provided"}
     
-    # Tokenize inputs
-    input_tokens = tokenizer.encode(prompt, return_tensors="pt").to(device)
 
-    # Run the model
-    output = model.generate(input_tokens)
+    defaults = {
+        "max_new_tokens": 75,
+        "top_k": 3,
+        "top_p": 0.75,
+        "temperature": 0.9
+    }
 
+    model_params = defaults | model_inputs
     # Decode output tokens
-    output_text = tokenizer.batch_decode(output, skip_special_tokens = True)[0]
+    output_text = generator(prompt, **model_params)
 
     result = {"output": output_text}
 
